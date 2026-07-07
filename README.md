@@ -1,5 +1,7 @@
 # awtrix-zoom-watcher
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X3W822RWA9)
+
 Turn your [AWTRIX 3](https://blueforcer.github.io/awtrix3/) pixel clock (like the
 [Ulanzi TC001](https://www.ulanzi.com/products/ulanzi-pixel-clock-2882)) into an
 on-air light for Zoom.
@@ -108,6 +110,12 @@ Removes the `launchd` agent, the installed script, and the log.
   not for the Zoom app merely being open.
 - Not just for "LIVE" — it's a generic Zoom-presence -> AWTRIX hook. Repurpose the
   payload for a mute indicator, a countdown, whatever your clock can render.
+
+## Support
+
+If this saved you from an awkward interruption, you can buy me a coffee:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X3W822RWA9)
 
 ## License
 
