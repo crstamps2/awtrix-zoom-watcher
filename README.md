@@ -3,7 +3,7 @@
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X3W822RWA9)
 
 Turn your [AWTRIX 3](https://blueforcer.github.io/awtrix3/) pixel clock (like the
-[Ulanzi TC001](https://www.ulanzi.com/products/ulanzi-pixel-clock-2882)) into an
+[Ulanzi TC001](https://www.ulanzi.com/products/ulanzi-pixel-smart-clock-2882)) into an
 on-air light for Zoom.
 
 When you join a Zoom **meeting** or **webinar**, the clock wakes up and shows a
