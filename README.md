@@ -113,7 +113,7 @@ Removes the `launchd` agent, the installed script, and the log.
 
 ## Support
 
-If this saved you from an awkward interruption, you can buy me a coffee:
+If this saved you from an awkward interruption, you can buy me a beer:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X3W822RWA9)
 
