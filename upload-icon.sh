@@ -7,10 +7,10 @@ set -euo pipefail
 # reset, so re-run this any time that happens.
 #
 # Usage: ./upload-icon.sh [AWTRIX_URL]
-#   AWTRIX_URL defaults to http://awtrix.lan, or $AWTRIX_URL if set.
+#   AWTRIX_URL defaults to http://awtrix-ng.local, or $AWTRIX_URL if set.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AWTRIX_URL="${1:-${AWTRIX_URL:-http://awtrix.lan}}"
+AWTRIX_URL="${1:-${AWTRIX_URL:-http://awtrix-ng.local}}"
 ICON="$SCRIPT_DIR/assets/pulse_red.gif"
 
 echo "Uploading $ICON to $AWTRIX_URL/ICONS ..."

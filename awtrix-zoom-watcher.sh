@@ -4,27 +4,37 @@
 # Shows a red pulsing "LIVE" notification on an AWTRIX NG clock (e.g. Ulanzi TC001)
 # whenever you are in a Zoom meeting or webinar, then clears it when you leave.
 #
-# Configure the two variables below, then run via launchd (see README).
+# Configure the variables below, then run via launchd (see README).
 
-AWTRIX_URL="http://awtrix.lan"   # Base URL of your AWTRIX NG clock (hostname or IP)
-APP_NAME="live"                  # Notification name used on the clock (for targeted dismissal)
+AWTRIX_URL="http://awtrix-ng.local"  # Base URL of your AWTRIX NG clock (hostname or IP)
+APP_NAME="live"          # Notification name on the clock (for targeted dismissal)
+POLL_INTERVAL=5          # Seconds between Zoom checks
+CURL_TIMEOUT=4           # Per-request timeout, so an unreachable clock can't stall the loop
+REASSERT_INTERVAL=60     # Seconds between re-pushes while still in a meeting (0 disables)
 
 was_in_meeting=false
+last_assert=0
 
 push_live() {
   # POST /api/v1/notifications interrupts the rotation immediately.
-  # hold keeps it on screen until we DELETE it (no need to re-send while the
-  # meeting continues), wakeup turns the display on if it was off, and
-  # stack:false replaces anything currently showing instead of queueing.
+  # hold pins it on screen until we DELETE it, so there is no need to re-send
+  # it every poll the way the AWTRIX 3 version had to. wakeup renders it even
+  # if the matrix is powered off, and stack:false replaces whatever
+  # notification is showing instead of queueing behind it.
   # The pulsing comes from the icon's own GIF animation (see README/icons),
   # not from blinking the text - an on-air sign, not a flashing one.
-  curl -s -X POST "$AWTRIX_URL/api/v1/notifications" \
+  if ! curl -sf -m "$CURL_TIMEOUT" -o /dev/null -X POST "$AWTRIX_URL/api/v1/notifications" \
     -H "Content-Type: application/json" \
-    -d "{\"name\":\"$APP_NAME\",\"text\":\"LIVE\",\"textColor\":\"#FF0000\",\"icon\":\"pulse_red\",\"scroll\":\"static\",\"hold\":true,\"wakeup\":true,\"stack\":false}"
+    -d "{\"name\":\"$APP_NAME\",\"text\":\"LIVE\",\"textColor\":\"#FF0000\",\"icon\":\"pulse_red\",\"scroll\":\"static\",\"hold\":true,\"wakeup\":true,\"stack\":false}"; then
+    echo "$(date): could not push LIVE to $AWTRIX_URL (clock unreachable, or the icon is missing - see upload-icon.sh)"
+    return 1
+  fi
 }
 
 clear_live() {
-  curl -s -X DELETE "$AWTRIX_URL/api/v1/notifications/$APP_NAME"
+  # 404 here just means nothing was held (e.g. the clock rebooted), which is
+  # the state we want anyway - so a failure to find it is not an error.
+  curl -s -m "$CURL_TIMEOUT" -X DELETE "$AWTRIX_URL/api/v1/notifications/$APP_NAME" >/dev/null
 }
 
 check_zoom_meeting() {
@@ -59,11 +69,20 @@ while true; do
   if $in_meeting && ! $was_in_meeting; then
     echo "$(date): Meeting started"
     push_live
+    last_assert=$SECONDS
+  elif $in_meeting && $was_in_meeting; then
+    # hold:true means the clock keeps LIVE up on its own, so this is only a
+    # safety net: if the clock rebooted or dropped off the network mid-call it
+    # has forgotten the notification, and nothing else would ever put it back.
+    if [ "$REASSERT_INTERVAL" -gt 0 ] && [ $((SECONDS - last_assert)) -ge "$REASSERT_INTERVAL" ]; then
+      push_live
+      last_assert=$SECONDS
+    fi
   elif ! $in_meeting && $was_in_meeting; then
     echo "$(date): Meeting ended"
     clear_live
   fi
 
   was_in_meeting=$in_meeting
-  sleep 5
+  sleep "$POLL_INTERVAL"
 done

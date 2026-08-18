@@ -36,5 +36,5 @@ echo "  loaded launchd agent $PLIST_LABEL"
 
 echo
 echo "Done. Edit AWTRIX_URL in $BIN_DIR/awtrix-zoom-watcher.sh if your clock"
-echo "is not reachable at http://awtrix.lan, then re-run: launchctl unload/load."
+echo "is not reachable at http://awtrix-ng.local, then re-run: launchctl unload/load."
 echo "Logs: $BIN_DIR/awtrix-zoom-watcher.log"
