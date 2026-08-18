@@ -1,45 +1,30 @@
 #!/bin/bash
 
 # awtrix-zoom-watcher
-# Shows a red "LIVE" indicator on an AWTRIX 3 clock (e.g. Ulanzi TC001)
+# Shows a red pulsing "LIVE" notification on an AWTRIX NG clock (e.g. Ulanzi TC001)
 # whenever you are in a Zoom meeting or webinar, then clears it when you leave.
 #
 # Configure the two variables below, then run via launchd (see README).
 
-AWTRIX_URL="http://awtrix.lan"   # Base URL of your AWTRIX 3 clock (hostname or IP)
-APP_NAME="live"                  # Custom app slot name used on the clock
+AWTRIX_URL="http://awtrix.lan"   # Base URL of your AWTRIX NG clock (hostname or IP)
+APP_NAME="live"                  # Notification name used on the clock (for targeted dismissal)
 
 was_in_meeting=false
 
-wake_clock() {
-  curl -s -X POST "$AWTRIX_URL/api/power" \
-    -H "Content-Type: application/json" \
-    -d '{"power":true}'
-}
-
 push_live() {
-  wake_clock
-  sleep 1
-
-  curl -s -X POST "$AWTRIX_URL/api/custom?name=$APP_NAME" \
+  # POST /api/v1/notifications interrupts the rotation immediately.
+  # hold keeps it on screen until we DELETE it (no need to re-send while the
+  # meeting continues), wakeup turns the display on if it was off, and
+  # stack:false replaces anything currently showing instead of queueing.
+  # The pulsing comes from the icon's own GIF animation (see README/icons),
+  # not from blinking the text - an on-air sign, not a flashing one.
+  curl -s -X POST "$AWTRIX_URL/api/v1/notifications" \
     -H "Content-Type: application/json" \
-    -d '{"text":"LIVE","color":"#FF0000","icon":"pulse_red","pushIcon":0,"noScroll":true,"lifetime":0}'
-
-  curl -s -X POST "$AWTRIX_URL/api/switch" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\":\"$APP_NAME\"}"
-}
-
-hold_live() {
-  curl -s -X POST "$AWTRIX_URL/api/switch" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\":\"$APP_NAME\"}"
+    -d "{\"name\":\"$APP_NAME\",\"text\":\"LIVE\",\"textColor\":\"#FF0000\",\"icon\":\"pulse_red\",\"scroll\":\"static\",\"hold\":true,\"wakeup\":true,\"stack\":false}"
 }
 
 clear_live() {
-  curl -s -X POST "$AWTRIX_URL/api/custom?name=$APP_NAME" \
-    -H "Content-Type: application/json" \
-    -d '{}'
+  curl -s -X DELETE "$AWTRIX_URL/api/v1/notifications/$APP_NAME"
 }
 
 check_zoom_meeting() {
@@ -74,8 +59,6 @@ while true; do
   if $in_meeting && ! $was_in_meeting; then
     echo "$(date): Meeting started"
     push_live
-  elif $in_meeting && $was_in_meeting; then
-    hold_live
   elif ! $in_meeting && $was_in_meeting; then
     echo "$(date): Meeting ended"
     clear_live
