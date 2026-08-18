@@ -14,6 +14,7 @@ REASSERT_INTERVAL=60     # Seconds between re-pushes while still in a meeting (0
 
 was_in_meeting=false
 last_assert=0
+applescript_failing=false
 
 push_live() {
   # POST /api/v1/notifications interrupts the rotation immediately.
@@ -37,8 +38,19 @@ clear_live() {
   curl -s -m "$CURL_TIMEOUT" -X DELETE "$AWTRIX_URL/api/v1/notifications/$APP_NAME" >/dev/null
 }
 
+# Sets $zoom_status to "in_meeting" or "not_in_meeting".
+#
+# This assigns a global rather than echoing a result, because the caller would
+# otherwise have to run it as $(check_zoom_meeting) - a subshell, which would
+# both swallow the diagnostics below into the captured value and lose the
+# applescript_failing flag that keeps them from repeating every poll.
 check_zoom_meeting() {
-  osascript -e '
+  # A failure here is almost always the macOS Automation permission being
+  # missing or revoked. That looks identical to "not in a meeting", so say so
+  # out loud - once per outage - instead of going quietly dead for the rest of
+  # the login session.
+  local out
+  if ! out=$(osascript -e '
     tell application "System Events"
       if (name of every process) contains "zoom.us" then
         tell process "zoom.us"
@@ -52,13 +64,28 @@ check_zoom_meeting() {
       end if
     end tell
     return "not_in_meeting"
-  ' 2>/dev/null
+  ' 2>&1); then
+    if ! $applescript_failing; then
+      applescript_failing=true
+      echo "$(date): cannot read Zoom's window titles, so meetings will not be detected: $out"
+      echo "$(date): approve this under System Settings > Privacy & Security > Automation, then restart the agent:"
+      echo "$(date):   launchctl kickstart -k gui/$(id -u)/com.awtrix.zoom-watcher"
+    fi
+    zoom_status="not_in_meeting"
+    return
+  fi
+
+  if $applescript_failing; then
+    applescript_failing=false
+    echo "$(date): reading Zoom's window titles again"
+  fi
+  zoom_status="$out"
 }
 
 trap clear_live EXIT
 
 while true; do
-  zoom_status=$(check_zoom_meeting)
+  check_zoom_meeting
 
   if [ "$zoom_status" = "in_meeting" ]; then
     in_meeting=true
