@@ -24,11 +24,14 @@ window titled `Zoom Meeting` or `Zoom Webinar` in the `zoom.us` process, which i
 only present during an active call. On a state change it hits the AWTRIX HTTP
 API:
 
-- **Meeting starts** -> push a `LIVE` notification, which wakes the display and
-  interrupts whatever app is currently showing.
-- **Still in a meeting** -> nothing to do. The notification is pushed with
+- **Meeting starts** -> push a `LIVE` notification, which interrupts whatever app
+  is currently showing. It carries `wakeup:true`, so it renders even if the
+  matrix is powered off — and, because that only suspends blanking while the
+  notification is up, a display you left off goes back to off afterwards.
+- **Still in a meeting** -> almost nothing to do. The notification is pushed with
   `hold:true`, so AWTRIX keeps it pinned on screen by itself until it's
-  explicitly dismissed.
+  explicitly dismissed. The watcher only re-pushes it every `REASSERT_INTERVAL`
+  seconds as a safety net, in case the clock rebooted mid-call and forgot it.
 - **Meeting ends** (or the script exits) -> dismiss the notification, and
   AWTRIX falls back to its normal app rotation.
 
@@ -39,7 +42,7 @@ and talks to your clock on your LAN.
 
 - **macOS** (uses `osascript` / AppleScript and `launchd`).
 - An **AWTRIX NG** device reachable over HTTP on your network. The default URL is
-  `http://awtrix.lan` — change it if your clock uses a different hostname or IP.
+  `http://awtrix-ng.local` — change it if your clock uses a different hostname or IP.
 - The Zoom desktop client.
 
 > Coming from AWTRIX 3? This version targets the [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/)
@@ -60,7 +63,7 @@ cd awtrix-zoom-watcher
 `install.sh` copies the watcher to `~/.local/bin`, renders the `launchd` agent
 with your home directory, and loads it so it runs now and on every login.
 
-If your clock is not at `http://awtrix.lan`, edit `AWTRIX_URL` at the top of
+If your clock is not at `http://awtrix-ng.local`, edit `AWTRIX_URL` at the top of
 `~/.local/bin/awtrix-zoom-watcher.sh`, then reload:
 
 ```bash
@@ -70,9 +73,18 @@ launchctl load   ~/Library/LaunchAgents/com.awtrix.zoom-watcher.plist
 
 ### Finding your clock's address
 
-`awtrix.lan` works if your router resolves the device's mDNS/hostname. Otherwise
-find its IP in your router's client list or on the clock's own settings screen,
-and use e.g. `AWTRIX_URL="http://192.168.1.42"`.
+`awtrix-ng.local` is AWTRIX NG's default hostname over mDNS (note the `-ng` — it
+differs from AWTRIX 3's, so this is worth re-checking if you just migrated).
+Confirm it resolves and that you're talking to an NG device:
+
+```bash
+curl -s http://awtrix-ng.local/api/v1/device
+# -> {"version":"1.1.0","boardType":"awtrixng","hostname":"awtrix-ng",...}
+```
+
+If that fails, find the IP in your router's client list or on the clock's own
+settings screen and use e.g. `AWTRIX_URL="http://192.168.1.42"`. If you renamed
+the device, use whatever hostname the `hostname` field above reports.
 
 ## Permissions
 
@@ -83,12 +95,15 @@ Without this, the watcher can't tell when you're in a call.
 
 ## Configuration
 
-Both settings live at the top of `awtrix-zoom-watcher.sh`:
+All settings live at the top of `awtrix-zoom-watcher.sh`:
 
-| Variable     | Default              | Meaning                                        |
-| ------------ | -------------------- | ---------------------------------------------- |
-| `AWTRIX_URL` | `http://awtrix.lan`  | Base URL of your AWTRIX NG clock.               |
-| `APP_NAME`   | `live`               | Notification name, used to dismiss it by name. |
+| Variable            | Default                    | Meaning                                                                 |
+| ------------------- | -------------------------- | ----------------------------------------------------------------------- |
+| `AWTRIX_URL`        | `http://awtrix-ng.local`   | Base URL of your AWTRIX NG clock.                                       |
+| `APP_NAME`          | `live`                     | Notification name, used to dismiss it by name. `active` is reserved by the API — pick anything else. |
+| `POLL_INTERVAL`     | `5`                        | Seconds between Zoom checks.                                            |
+| `CURL_TIMEOUT`      | `4`                        | Per-request timeout, so an unreachable clock can't stall the loop.      |
+| `REASSERT_INTERVAL` | `60`                       | Seconds between re-pushes during a call, so a clock that reboots mid-meeting gets `LIVE` back. `0` disables. |
 
 Want a different look? Edit the `-d '{...}'` payload in `push_live`. The
 `text`, `textColor`, and `icon` fields map directly to the AWTRIX NG
@@ -108,7 +123,7 @@ clock was offline during install, was factory-reset, or you just want to
 re-push it:
 
 ```bash
-./upload-icon.sh                        # uses http://awtrix.lan
+./upload-icon.sh                        # uses http://awtrix-ng.local
 ./upload-icon.sh http://192.168.1.42     # or a specific address
 ```
 
