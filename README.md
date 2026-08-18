@@ -2,14 +2,14 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X3W822RWA9)
 
-Turn your [AWTRIX 3](https://blueforcer.github.io/awtrix3/) pixel clock (like the
+Turn your [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/) pixel clock (like the
 [Ulanzi TC001](https://www.ulanzi.com/products/ulanzi-pixel-smart-clock-2882)) into an
 on-air light for Zoom.
 
-When you join a Zoom **meeting** or **webinar**, the clock wakes up and shows a
-red pulsing **LIVE** indicator. When you leave, it clears itself and returns to
-whatever it was showing before. It's a tiny "do not disturb / I'm on a call"
-sign for the people around you.
+When you join a Zoom **meeting** or **webinar**, the clock wakes up and shows
+an on-air sign: a pulsing red circle next to solid red **LIVE** text. When you
+leave, it clears itself and returns to whatever it was showing before. It's a
+tiny "do not disturb / I'm on a call" sign for the people around you.
 
 ```
 +-----------------+
@@ -24,9 +24,13 @@ window titled `Zoom Meeting` or `Zoom Webinar` in the `zoom.us` process, which i
 only present during an active call. On a state change it hits the AWTRIX HTTP
 API:
 
-- **Meeting starts** -> power the display on, push a custom `LIVE` app, switch to it.
-- **Still in a meeting** -> keep the `LIVE` app in front.
-- **Meeting ends** (or the script exits) -> clear the custom app.
+- **Meeting starts** -> push a `LIVE` notification, which wakes the display and
+  interrupts whatever app is currently showing.
+- **Still in a meeting** -> nothing to do. The notification is pushed with
+  `hold:true`, so AWTRIX keeps it pinned on screen by itself until it's
+  explicitly dismissed.
+- **Meeting ends** (or the script exits) -> dismiss the notification, and
+  AWTRIX falls back to its normal app rotation.
 
 No Zoom API keys, no OAuth, no cloud service. It only reads local window titles
 and talks to your clock on your LAN.
@@ -34,9 +38,16 @@ and talks to your clock on your LAN.
 ## Requirements
 
 - **macOS** (uses `osascript` / AppleScript and `launchd`).
-- An **AWTRIX 3** device reachable over HTTP on your network. The default URL is
+- An **AWTRIX NG** device reachable over HTTP on your network. The default URL is
   `http://awtrix.lan` — change it if your clock uses a different hostname or IP.
 - The Zoom desktop client.
+
+> Coming from AWTRIX 3? This version targets the [AWTRIX NG](https://blueforcer.github.io/awtrix-ng/)
+> HTTP API (`/api/v1/...`) and will not work against an AWTRIX 3 device — see
+> [AWTRIX NG's migration guide](https://blueforcer.github.io/awtrix-ng/guides/migrating-from-awtrix3/)
+> if you're moving from one to the other. A fresh AWTRIX NG flash also wipes
+> uploaded icons, so `install.sh` re-uploads the bundled `pulse_red` icon for
+> you - see [Icon](#icon) below if you ever need to redo that by hand.
 
 ## Install
 
@@ -76,15 +87,34 @@ Both settings live at the top of `awtrix-zoom-watcher.sh`:
 
 | Variable     | Default              | Meaning                                        |
 | ------------ | -------------------- | ---------------------------------------------- |
-| `AWTRIX_URL` | `http://awtrix.lan`  | Base URL of your AWTRIX 3 clock.               |
-| `APP_NAME`   | `live`               | Custom app slot name used for the indicator.   |
+| `AWTRIX_URL` | `http://awtrix.lan`  | Base URL of your AWTRIX NG clock.               |
+| `APP_NAME`   | `live`               | Notification name, used to dismiss it by name. |
 
 Want a different look? Edit the `-d '{...}'` payload in `push_live`. The
-`text`, `color`, and `icon` fields map directly to the AWTRIX
-[custom app API](https://blueforcer.github.io/awtrix3/#/api?id=custom-apps-and-notifications).
-`icon` is an AWTRIX icon ID that must already exist on the device (the default
-`pulse_red` is a common one — swap it for any icon you have installed, or drop
-the field).
+`text`, `textColor`, and `icon` fields map directly to the AWTRIX NG
+[notification API](https://blueforcer.github.io/awtrix-ng/reference/http/#post-apiv1notifications) —
+the full set of fields it accepts (colors, effects, sound, etc.) is in the
+[app & notification payload reference](https://blueforcer.github.io/awtrix-ng/reference/payload/).
+`icon` is an AWTRIX icon ID that must already exist on the device — see
+[Icon](#icon) below.
+
+## Icon
+
+The pulsing circle is `assets/pulse_red.gif`, an 8x8 animated icon bundled in
+this repo (its own animation is what pulses - the notification's `text` stays
+a solid color, not blinking, so it reads as an on-air sign rather than a
+flashing alert). `install.sh` uploads it to your clock automatically. If your
+clock was offline during install, was factory-reset, or you just want to
+re-push it:
+
+```bash
+./upload-icon.sh                        # uses http://awtrix.lan
+./upload-icon.sh http://192.168.1.42     # or a specific address
+```
+
+Want a different icon instead? Drop any GIF or JPEG into AWTRIX's `/ICONS`
+folder (via the web UI or `POST /api/v1/files?dir=/ICONS`) and point `icon` in
+`push_live` at its filename, minus the extension.
 
 ## Logs
 

@@ -22,6 +22,13 @@ echo "  copied watcher -> $BIN_DIR/awtrix-zoom-watcher.sh"
 sed "s|HOMEDIR|$HOME|g" "$SCRIPT_DIR/com.awtrix.zoom-watcher.plist" > "$PLIST_DEST"
 echo "  wrote launchd plist -> $PLIST_DEST"
 
+if "$SCRIPT_DIR/upload-icon.sh"; then
+  echo "  uploaded pulse_red icon to the clock"
+else
+  echo "  could not upload the pulse_red icon (is the clock reachable?)"
+  echo "  re-run ./upload-icon.sh once it is, or after any factory reset"
+fi
+
 # Reload if already loaded, then load.
 launchctl unload "$PLIST_DEST" 2>/dev/null || true
 launchctl load "$PLIST_DEST"
