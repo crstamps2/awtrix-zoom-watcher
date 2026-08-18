@@ -102,7 +102,7 @@ All settings live at the top of `awtrix-zoom-watcher.sh`:
 | `AWTRIX_URL`        | `http://awtrix-ng.local`   | Base URL of your AWTRIX NG clock.                                       |
 | `APP_NAME`          | `live`                     | Notification name, used to dismiss it by name. `active` is reserved by the API — pick anything else. |
 | `POLL_INTERVAL`     | `5`                        | Seconds between Zoom checks.                                            |
-| `CURL_TIMEOUT`      | `4`                        | Per-request timeout, so an unreachable clock can't stall the loop.      |
+| `CURL_TIMEOUT`      | `10`                       | Per-request timeout, so an unreachable clock can't stall the loop.      |
 | `REASSERT_INTERVAL` | `60`                       | Seconds between re-pushes during a call, so a clock that reboots mid-meeting gets `LIVE` back. `0` disables. |
 
 Want a different look? Edit the `-d '{...}'` payload in `push_live`. The
@@ -138,6 +138,44 @@ Output goes to `~/.local/bin/awtrix-zoom-watcher.log`:
 ```bash
 tail -f ~/.local/bin/awtrix-zoom-watcher.log
 ```
+
+## Troubleshooting
+
+### `LIVE` stays on the clock after the call ends
+
+Notifications are pushed with `hold:true`, so the clock shows `LIVE` until
+something dismisses it — meaning a dismissal that never arrives leaves the sign
+up indefinitely. The watcher retries the dismissal three times and logs
+`could not clear LIVE ...` if all three fail, so check the log first. Restarting
+the agent also clears any stale sign, because it dismisses `LIVE` once on
+startup:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.awtrix.zoom-watcher
+```
+
+To clear it by hand:
+
+```bash
+curl -4 -X DELETE http://awtrix-ng.local/api/v1/notifications/live
+```
+
+### Requests to the hostname time out, but the IP works
+
+Worth knowing if you write your own scripts against the clock: it publishes no
+IPv6 address, and resolving a `.local` name for both address families — which
+`curl` does by default — blocks on the IPv6 half for about five seconds before
+giving up, every time the mDNS cache goes cold. Confusingly `ping` looks fine,
+because it only ever asks for IPv4.
+
+```bash
+curl    -s -m4 http://awtrix-ng.local/api/v1/device   # times out
+curl -4 -s -m4 http://awtrix-ng.local/api/v1/device   # ~2ms
+```
+
+Passing `-4` avoids it, which is why every request in these scripts does. A
+short `--max-time` without `-4` is the bad combination: it expires during the
+stalled lookup, so the request never even goes out.
 
 ## Uninstall
 

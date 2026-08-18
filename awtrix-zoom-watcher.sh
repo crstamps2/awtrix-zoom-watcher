@@ -7,9 +7,15 @@
 # Configure the variables below, then run via launchd (see README).
 
 AWTRIX_URL="http://awtrix-ng.local"  # Base URL of your AWTRIX NG clock (hostname or IP)
+
+# Every curl below passes -4. The clock publishes no AAAA record, so resolving
+# a .local name for both address families - which curl does by default - blocks
+# on the IPv6 half for ~5s before giving up, on every single request once the
+# mDNS cache goes cold. -4 skips that entirely and takes DNS from ~5s to ~2ms.
+# Set AWTRIX_URL to a literal IP if your network somehow needs IPv6.
 APP_NAME="live"          # Notification name on the clock (for targeted dismissal)
 POLL_INTERVAL=5          # Seconds between Zoom checks
-CURL_TIMEOUT=4           # Per-request timeout, so an unreachable clock can't stall the loop
+CURL_TIMEOUT=10          # Per-request timeout, so an unreachable clock can't stall the loop
 REASSERT_INTERVAL=60     # Seconds between re-pushes while still in a meeting (0 disables)
 
 was_in_meeting=false
@@ -24,7 +30,7 @@ push_live() {
   # notification is showing instead of queueing behind it.
   # The pulsing comes from the icon's own GIF animation (see README/icons),
   # not from blinking the text - an on-air sign, not a flashing one.
-  if ! curl -sf -m "$CURL_TIMEOUT" -o /dev/null -X POST "$AWTRIX_URL/api/v1/notifications" \
+  if ! curl -4 -sf -m "$CURL_TIMEOUT" -o /dev/null -X POST "$AWTRIX_URL/api/v1/notifications" \
     -H "Content-Type: application/json" \
     -d "{\"name\":\"$APP_NAME\",\"text\":\"LIVE\",\"textColor\":\"#FF0000\",\"icon\":\"pulse_red\",\"scroll\":\"static\",\"hold\":true,\"wakeup\":true,\"stack\":false}"; then
     echo "$(date): could not push LIVE to $AWTRIX_URL (clock unreachable, or the icon is missing - see upload-icon.sh)"
@@ -33,9 +39,24 @@ push_live() {
 }
 
 clear_live() {
-  # 404 here just means nothing was held (e.g. the clock rebooted), which is
-  # the state we want anyway - so a failure to find it is not an error.
-  curl -s -m "$CURL_TIMEOUT" -X DELETE "$AWTRIX_URL/api/v1/notifications/$APP_NAME" >/dev/null
+  # This is the one call that must not fail quietly. hold:true means the clock
+  # keeps LIVE up until something dismisses it, so a dropped DELETE here leaves
+  # a permanent on-air sign - the failure that is least acceptable and hardest
+  # for anyone to diagnose from the clock itself. So: retry, then complain.
+  local attempt code
+  for attempt in 1 2 3; do
+    code=$(curl -4 -s -m "$CURL_TIMEOUT" -o /dev/null -w '%{http_code}' \
+      -X DELETE "$AWTRIX_URL/api/v1/notifications/$APP_NAME")
+    # 200 = dismissed. 404 = nothing was held (the clock rebooted, say), which
+    # is the state we wanted anyway. Anything else, including curl failing
+    # outright and reporting 000, is worth another try.
+    case "$code" in
+      200|404) return 0 ;;
+    esac
+    sleep 1
+  done
+  echo "$(date): could not clear LIVE from $AWTRIX_URL after 3 tries (last HTTP status ${code:-none}) - the clock may still be showing it"
+  return 1
 }
 
 # Sets $zoom_status to "in_meeting" or "not_in_meeting".
@@ -83,6 +104,13 @@ check_zoom_meeting() {
 }
 
 trap clear_live EXIT
+
+# A previous run may have exited without dismissing LIVE - killed with SIGKILL,
+# lost power, or simply unable to reach the clock at the time. Because hold:true
+# never expires, that sign would otherwise stay up until the next meeting ends.
+# Clearing once at startup means a restart of this agent is always enough to
+# recover, which is what KeepAlive and login relaunch give us for free.
+clear_live
 
 while true; do
   check_zoom_meeting

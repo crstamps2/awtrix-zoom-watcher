@@ -14,7 +14,7 @@ AWTRIX_URL="${1:-${AWTRIX_URL:-http://awtrix-ng.local}}"
 ICON="$SCRIPT_DIR/assets/pulse_red.gif"
 
 echo "Uploading $ICON to $AWTRIX_URL/ICONS ..."
-curl -sf -X POST "$AWTRIX_URL/api/v1/files?dir=/ICONS" \
+curl -4 -sf -X POST "$AWTRIX_URL/api/v1/files?dir=/ICONS" \
   -F "file=@$ICON"
 echo
 echo "Done."
